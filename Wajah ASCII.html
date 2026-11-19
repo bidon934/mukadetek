@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wajah ASCII</title>
+<style>
+:root{color-scheme:dark;--bg:#010403;--fg:#d9fff0;--g:#49e0b4;--gd:#1c6b4d;--ink:#02221a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#010403}}
+:root[data-theme="dark"]{--bg:#010403}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+#face{position:fixed;inset:0;width:100%;height:100%}
+header{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:calc(env(safe-area-inset-left,0px) + 14px);right:calc(env(safe-area-inset-right,0px) + 14px);display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:.14em;color:var(--g);text-shadow:0 0 8px rgba(73,224,180,.5)}
+header b{font-size:14px}
+header .mid{opacity:.7;font-size:10px}
+#dot{display:inline-block;width:8px;height:8px;margin-right:7px;background:#456;transition:.3s}
+#dot.live{background:var(--g);box-shadow:0 0 10px var(--g)}
+.ctl{position:fixed;left:calc(env(safe-area-inset-left,0px) + 14px);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;gap:6px;flex-wrap:wrap}
+button{font:inherit;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#c8ffe9;background:var(--gd);border:1px solid var(--g);padding:7px 11px;cursor:pointer}
+button.on{background:var(--g);color:var(--ink)}
+#crt{position:fixed;right:calc(env(safe-area-inset-right,0px) + 14px);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);width:clamp(190px,27vw,380px);border:2px solid var(--g);background:#04140d;box-shadow:0 0 26px rgba(73,224,180,.28);border-radius:6px;overflow:hidden}
+#crt.off{display:none}
+.bar{display:flex;justify-content:space-between;background:var(--g);color:var(--ink);font-size:9px;letter-spacing:.1em;padding:3px 7px}
+.scr{position:relative;aspect-ratio:4/3;background:#000}
+.scr canvas,.scr video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.scr video{opacity:0;pointer-events:none;transform:scaleX(-1)}
+.scr video.fb{opacity:1;filter:grayscale(1) sepia(1) hue-rotate(95deg) saturate(3) contrast(1.2)}
+#start,#rot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(1,4,3,.82);padding:16px;box-sizing:border-box;transition:opacity .5s}
+#start.hide{opacity:0;pointer-events:none}
+.card{max-width:420px;text-align:center;border:1px solid var(--g);padding:20px;background:#03100b;box-shadow:0 0 30px rgba(73,224,180,.2)}
+.card h1{margin:0 0 8px;font-size:20px;letter-spacing:.16em;color:var(--g)}
+.card p{margin:0 0 14px;font-size:12px;line-height:1.6;opacity:.8}
+.card .row{display:flex;gap:8px;justify-content:center}
+.card small{display:block;margin-top:12px;font-size:10px;opacity:.5}
+#rot{display:none;z-index:9;background:#010403;flex-direction:column;gap:10px;color:var(--g);text-align:center;font-size:14px;letter-spacing:.1em}
+#rot i{font-size:44px;font-style:normal}
+@media (orientation:portrait){#rot{display:flex}}
+@media (max-width:640px){header .mid{display:none}}
+</style></head><body>
+<canvas id="face"></canvas>
+<header><b>WAJAH.exe</b><span class="mid" id="rd">MULUT 0% · MATA 100/100%</span><span><i id="dot"></i><span id="st">SIAP</span></span></header>
+<div class="ctl"><button id="tDots" class="on">Titik</button><button id="tCam" class="on">Kamera</button><button id="tDemo">Demo</button><button id="tFs">Layar penuh</button></div>
+<div id="crt"><div class="bar"><span>■ KAMERA / FEED-01</span><span id="crtSt">NO SIGNAL</span></div>
+<div class="scr"><video id="v" playsinline muted></video><canvas id="gl"></canvas><canvas id="ov"></canvas></div>
+<div class="bar"><span>LOC. FACIAL MESH</span><span>● LIVE</span></div></div>
+<div id="start"><div class="card"><h1>WAJAH ASCII</h1>
+<p>Hadapkan wajahmu ke kamera. Mulut, mata, dan alismu akan ditiru oleh wajah dari huruf yang terus bergerak.</p>
+<div class="row"><button id="go" class="on">Aktifkan kamera</button><button id="demo">Mode demo</button></div>
+<small>Video diproses di perangkatmu dan tidak direkam.</small></div></div>
+<div id="rot"><i>⟳</i>Putar perangkat ke mode landscape</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js"></script>
+<script>
+const $=s=>document.querySelector(s),CDN='https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/';
+const v=$('#v'),fc=$('#face'),hx=fc.getContext('2d'),glc=$('#gl'),ovc=$('#ov'),ovx=ovc.getContext('2d'),FONT='ui-monospace,Menlo,Consolas,monospace';
+const off=document.createElement('canvas'),ox=off.getContext('2d',{willReadFrequently:true});
+let W=0,H=0,DPR=1,CHH=10,CW=6,GW=1,GH=1,acc=new Float32Array(1);
+function resize(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;fc.width=W*DPR;fc.height=H*DPR;hx.setTransform(DPR,0,0,DPR,0,0);
+ CHH=Math.max(7,Math.round(H/68));CW=CHH*.6;GW=Math.ceil(W/CW);GH=Math.ceil(H/CHH);off.width=GW;off.height=GH;acc=new Float32Array(GW*GH)}
+addEventListener('resize',resize);resize();
+
+const GLY=[[...".,'`:;·¦"],[...'-~=+!/\\|()?ªº'],[...'coaesznuxvräöüñç'],[...'ABDEGHKMNOQRSU8069#$%&W'],[...'ÆØÑÊËÅÄÖÕ@MWNEQ08']];
+const COLS=['#3d4a4c','#6f8082','#a3b5b6','#d9e6e6','#ffffff'];
+const OVAL=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
+const RE=[33,246,161,160,159,158,157,173,133,155,154,153,145,144,163,7],LE=[263,466,388,387,386,385,384,398,362,382,381,380,374,373,390,249];
+const LIPO=[61,185,40,39,37,0,267,269,270,409,291,375,321,405,314,17,84,181,91,146],LIPI=[78,191,80,81,82,13,312,311,310,415,308,324,318,402,317,14,87,178,88,95];
+const BROWR=[70,63,105,66,107],BROWL=[300,293,334,296,336],NOSE=[168,6,197,195,5,4];
+let dots=true,demo=false,ready=false,fm=null,busy=false,lastT=-1,last=performance.now(),lastN=-1,face=null,raw=null,sc=0,fr=0;
+
+/* face tracking: one face, scaled to fit the screen, smoothed, fade in/out */
+function setTarget(arr){const now=performance.now();if(!face)face={t:arr,lm:arr.map(p=>({...p})),a:0,seen:now};else{face.t=arr;face.seen=now}}
+function mapFace(l){const vw=v.videoWidth||1280,vh=v.videoHeight||720,a=l[10],b=l[152];
+ const fh=Math.hypot((a.x-b.x)*vw,(a.y-b.y)*vh)||1,tg=H*.6/fh;sc=sc?sc+(tg-sc)*.15:tg;
+ let cx=0,cy=0;[10,152,234,454].forEach(i=>{cx+=l[i].x/4;cy+=l[i].y/4});
+ const X0=Math.max(W*.3,Math.min(W*.7,W/2+(.5-cx)*vw*sc*.45)),Y0=Math.max(H*.4,Math.min(H*.58,H*.47+(cy-.5)*vh*sc*.45));
+ return l.map(q=>({x:X0+(cx-q.x)*vw*sc,y:Y0+(q.y-cy)*vh*sc}))}
+function demoFace(t){
+ const S=H*.6,cx=W/2+Math.sin(t*.5)*S*.05,cy=H*.47+Math.sin(t*.7)*S*.02,L=Array.from({length:478},()=>({x:cx,y:cy}));
+ const set=(i,x,y)=>{L[i]={x:cx+x*S,y:cy+y*S}};
+ OVAL.forEach((i,k)=>{const th=-Math.PI/2+k/36*6.2832;set(i,.34*Math.cos(th),.5*Math.sin(th))});
+ const bl=Math.pow(Math.max(0,Math.sin(t*1.7)),40),eo=.035*(1-bl)+.002,ew=.16,gx=Math.sin(t*.9)*.02,gy=Math.sin(t*.6)*.008;
+ const eye=(ids,ec,dir,ir)=>{ids.forEach((i,k)=>{const u=k<=8?k/8:1-(k-8)/8;set(i,ec+dir*(u-.5)*ew,-.1+(k<=8?-1:1)*eo*Math.sin(Math.PI*u))});set(ir,ec+gx,-.1+gy)};
+ eye(RE,-.17,1,468);eye(LE,.17,-1,473);
+ const rz=.015*(.5+.5*Math.sin(t*.8));
+ [[BROWR,-.17,1],[BROWL,.17,-1]].forEach(([ids,ec,d])=>ids.forEach((i,k)=>set(i,ec+d*(k/4-.5)*.2,-.2-.02*Math.sin(Math.PI*k/4)-rz)));
+ const o=.075*Math.pow(.5+.5*Math.sin(t*2.6),2),mw=.15+.01*Math.sin(t*.7),my=.27;
+ LIPO.forEach((i,k)=>{const u=k<=10?k/10:1-(k-10)/10,s=Math.sin(Math.PI*u);set(i,(u-.5)*2*mw,my+(k<=10?-.028*s:(.035+o)*s))});
+ LIPI.forEach((i,k)=>{const u=k<=10?k/10:1-(k-10)/10,s=Math.sin(Math.PI*u);set(i,(u-.5)*1.8*mw,my+(k<=10?-.002*s:(.004+o)*s))});
+ [[168,0,-.12],[6,0,-.08],[197,0,-.03],[195,0,0],[5,0,.05],[4,0,.1],[98,-.05,.14],[97,-.025,.155],[2,0,.16],[326,.025,.155],[327,.05,.14],[1,0,.12],[151,0,-.38],[205,-.2,.08],[425,.2,.08]].forEach(([i,x,y])=>set(i,x,y));
+ return L}
+
+/* brightness field: shaded face at glyph-grid resolution; dark eyes / mouth hole */
+function fieldFace(f){
+ const P=f.lm,A=f.a,fw=Math.hypot(P[234].x-P[454].x,P[234].y-P[454].y)||1;
+ const path=(ids,cl)=>{ox.beginPath();ids.forEach((i,k)=>k?ox.lineTo(P[i].x,P[i].y):ox.moveTo(P[i].x,P[i].y));if(cl)ox.closePath()};
+ const blob=(q,r,col,al)=>{const g=ox.createRadialGradient(q.x,q.y,0,q.x,q.y,r);g.addColorStop(0,`rgba(${col},${al*A})`);g.addColorStop(1,`rgba(${col},0)`);ox.fillStyle=g;ox.fillRect(q.x-r,q.y-r,2*r,2*r)};
+ ox.lineJoin='round';
+ const dx=P[152].x-P[10].x,dy=P[152].y-P[10].y,dl=Math.hypot(dx,dy)||1;
+ ox.lineCap='butt';ox.strokeStyle=`rgba(255,255,255,${.2*A})`;ox.lineWidth=fw*.55;ox.beginPath();
+ ox.moveTo(P[152].x-dx/dl*fw*.1,P[152].y-dy/dl*fw*.1);ox.lineTo(P[152].x+dx/dl*fw*.9,P[152].y+dy/dl*fw*.9);ox.stroke();ox.lineCap='round';
+ const m={x:(P[234].x+P[454].x)/2,y:(P[10].y+P[152].y)/2},g=ox.createRadialGradient(m.x,m.y,0,m.x,m.y,fw*.8);
+ g.addColorStop(0,`rgba(255,255,255,${.6*A})`);g.addColorStop(.6,`rgba(255,255,255,${.45*A})`);g.addColorStop(1,`rgba(255,255,255,${.18*A})`);
+ ox.fillStyle=g;path(OVAL,1);ox.fill();
+ [151,205,425,4,152].forEach(i=>blob(P[i],fw*.26,'255,255,255',.22));
+ ox.strokeStyle=`rgba(255,255,255,${.28*A})`;ox.lineWidth=fw*.05;path(NOSE);ox.stroke();
+ [98,327].forEach(i=>blob(P[i],fw*.055,'0,0,0',.85));
+ ox.strokeStyle=`rgba(255,255,255,${.95*A})`;ox.lineWidth=fw*.035;path(BROWR);ox.stroke();path(BROWL);ox.stroke();
+ [[RE,33,133,468],[LE,263,362,473]].forEach(([ids,a,b,ir])=>{
+  const ew=Math.hypot(P[a].x-P[b].x,P[a].y-P[b].y),c=P[ir]||{x:(P[a].x+P[b].x)/2,y:(P[a].y+P[b].y)/2};
+  ox.strokeStyle=`rgba(0,0,0,${.5*A})`;ox.lineWidth=fw*.07;path(ids,1);ox.stroke();ox.fillStyle=`rgba(0,0,0,${A})`;ox.fill();
+  ox.save();path(ids,1);ox.clip();
+  ox.fillStyle=`rgba(255,255,255,${.85*A})`;ox.beginPath();ox.arc(c.x,c.y,ew*.22,0,6.283);ox.fill();
+  ox.fillStyle='#000';ox.beginPath();ox.arc(c.x,c.y,ew*.09,0,6.283);ox.fill();ox.restore()});
+ ox.fillStyle=`rgba(255,255,255,${.78*A})`;path(LIPO,1);ox.fill();
+ ox.fillStyle=`rgba(0,0,0,${A})`;path(LIPI,1);ox.fill();
+ ox.strokeStyle=`rgba(0,0,0,${.85*A})`;ox.lineWidth=fw*.012;path(LIPI,1);ox.stroke()}
+function contours(c,P){c.beginPath();[[OVAL,1],[RE,1],[LE,1],[LIPO,1],[LIPI,1],[BROWR],[BROWL],[NOSE]].forEach(([ids,cl])=>{ids.forEach((i,k)=>k?c.lineTo(P[i].x,P[i].y):c.moveTo(P[i].x,P[i].y));if(cl)c.closePath()});c.stroke();
+ [468,473].forEach(i=>{if(P[i]&&P[i].x){c.beginPath();c.arc(P[i].x,P[i].y,3,0,6.283);c.fill()}})}
+
+function render(t){
+ ox.setTransform(1,0,0,1,0,0);ox.globalCompositeOperation='source-over';ox.fillStyle='#000';ox.fillRect(0,0,GW,GH);
+ ox.setTransform(1/CW,0,0,1/CHH,0,0);
+ if(face&&face.a>.01)fieldFace(face);
+ const d=ox.getImageData(0,0,GW,GH).data,B=[[],[],[],[],[]],st=Math.floor(t*9);
+ for(let i=0,n=GW*GH;i<n;i++){const c=d[i*4]/255;let a=acc[i]*.5;if(c>a)a=c;acc[i]=a;if(a<.08)continue;
+  const k=(i*73856093^((st+(i%5))*19349663))>>>0,b=a+((k%1000)/1000-.5)*.18,L=b<.22?0:b<.42?1:b<.62?2:b<.82?3:4,set=GLY[L];
+  B[L].push(((i%GW)+.5)*CW,(((i/GW)|0)+.5)*CHH,set[(k>>>10)%set.length])}
+ hx.clearRect(0,0,W,H);hx.textAlign='center';hx.textBaseline='middle';
+ for(let L=0;L<5;L++){hx.font=`${L>2?'bold ':''}${CHH}px ${FONT}`;hx.fillStyle=COLS[L];const a=B[L];for(let j=0;j<a.length;j+=3)hx.fillText(a[j+2],a[j],a[j+1])}
+ if(dots&&face&&face.a>.05){hx.globalAlpha=face.a*.7;hx.strokeStyle='#49e0b4';hx.fillStyle='#c8ffe9';hx.lineWidth=1;contours(hx,face.lm);hx.globalAlpha=1}}
+
+/* CRT camera panel (WebGL green phosphor, no distortion) + mesh overlay */
+let gl=null,tex,U={},crtOn=true,gw=0;
+try{gl=glc.getContext('webgl',{antialias:false});if(!gl)throw 0;
+ const sh=(ty,src)=>{const s=gl.createShader(ty);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s};
+ const pr=gl.createProgram();
+ gl.attachShader(pr,sh(gl.VERTEX_SHADER,'attribute vec2 a;varying vec2 uv;void main(){uv=a*.5+.5;gl_Position=vec4(a,0.,1.);}'));
+ gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,`precision mediump float;varying vec2 uv;uniform sampler2D tx;uniform float t,has,ar;uniform vec2 rs;
+ float hh(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+ void main(){vec2 p=uv*2.-1.;float r2=dot(p,p);vec2 q=p*.5+.5;
+  q.x=(q.x-.5)*min(1.,ar)+.5;q.y=(q.y-.5)*min(1.,1./ar)+.5;q.x=1.-q.x;
+  float g=dot(texture2D(tx,q).rgb,vec3(.3,.59,.11));g=clamp((g-.06)*1.5,0.,1.);
+  float n=hh(uv*rs+t);g=mix(n*.5,g,has);
+  g*=.82+.18*sin(uv.y*rs.y*1.2);g*=.96+.04*sin(uv.y*7.-t*2.);g+=(n-.5)*.07;g*=1.-.28*r2;
+  gl_FragColor=vec4(vec3(.12,1.,.62)*g+vec3(0.,.05,.03),1.);}`));
+ gl.linkProgram(pr);gl.useProgram(pr);
+ gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+ const al=gl.getAttribLocation(pr,'a');gl.enableVertexAttribArray(al);gl.vertexAttribPointer(al,2,gl.FLOAT,false,0,0);
+ ['t','has','ar','rs','tx'].forEach(k=>U[k]=gl.getUniformLocation(pr,k));
+ tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
+ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+ gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+ gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0,255]));
+}catch(e){gl=null;glc.style.display='none';v.classList.add('fb')}
+function renderCRT(t){
+ if(!crtOn)return;const cw=glc.clientWidth;if(!cw)return;
+ const k=Math.min(DPR,1.5),ch=glc.clientHeight;
+ if(cw!==gw){gw=cw;ovc.width=Math.round(cw*k);ovc.height=Math.round(ch*k);if(gl){glc.width=ovc.width;glc.height=ovc.height;gl.viewport(0,0,glc.width,glc.height)}}
+ const ok=!demo&&ready&&v.readyState>=2&&v.videoWidth;
+ if(gl){if(ok){gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,v)}
+  gl.uniform1f(U.t,t%100);gl.uniform1f(U.has,ok?1:0);gl.uniform1f(U.ar,(4/3)/(ok?v.videoWidth/v.videoHeight:16/9));gl.uniform2f(U.rs,glc.width,glc.height);gl.uniform1i(U.tx,0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4)}
+ ovx.setTransform(k,0,0,k,0,0);ovx.clearRect(0,0,cw,ch);
+ if(!ok||!raw||!face||performance.now()-face.seen>220)return;
+ const vw=v.videoWidth,vh=v.videoHeight,s2=Math.max(cw/vw,ch/vh),o2x=(vw*s2-cw)/2,o2y=(vh*s2-ch)/2;
+ ovx.globalAlpha=face.a;ovx.strokeStyle='#49e0b4';ovx.fillStyle='#fff';ovx.lineWidth=1.5;
+ contours(ovx,raw.map(q=>({x:cw-(q.x*vw*s2-o2x),y:q.y*vh*s2-o2y})));ovx.globalAlpha=1}
+
+function setSt(x,live){$('#st').textContent=x;$('#dot').classList.toggle('live',!!live)}
+function readout(){if(!face)return;const P=face.lm,fw=Math.hypot(P[234].x-P[454].x,P[234].y-P[454].y)||1,cl=x=>Math.max(0,Math.min(1,x));
+ const mo=cl(Math.hypot(P[13].x-P[14].x,P[13].y-P[14].y)/fw/.16);
+ const eo=(a,b,c,d)=>cl((Math.hypot(P[a].x-P[b].x,P[a].y-P[b].y)/(Math.hypot(P[c].x-P[d].x,P[c].y-P[d].y)||1)-.08)/.2);
+ $('#rd').textContent=`MULUT ${Math.round(mo*100)}% · MATA ${Math.round(eo(159,145,33,133)*100)}/${Math.round(eo(386,374,263,362)*100)}%`}
+function frame(now){
+ const dt=Math.min(.05,(now-last)/1000),t=now/1000;last=now;fr++;
+ if(demo)setTarget(demoFace(t));
+ else if(ready&&!busy&&v.readyState>=2&&v.currentTime!==lastT){lastT=v.currentTime;busy=true;fm.send({image:v}).catch(()=>{}).finally(()=>busy=false)}
+ let n=0;
+ if(face){const seen=now-face.seen<220;if(seen)n=1;
+  face.a=Math.max(0,Math.min(1,face.a+(seen?dt*7:-dt*5)));
+  for(let i=0;i<478;i++){const c=face.lm[i],tg=face.t[i],dd=Math.hypot(tg.x-c.x,tg.y-c.y),k=1-Math.exp(-dt*Math.min(60,16+dd*.25));c.x+=(tg.x-c.x)*k;c.y+=(tg.y-c.y)*k}
+  if(face.a<=0&&!seen){face=null;sc=0}}
+ render(t);renderCRT(t);if(fr%5===0)readout();
+ if(n!==lastN&&(ready||demo)){lastN=n;setSt((demo?'DEMO · ':'')+(n?'WAJAH TERDETEKSI':'MENCARI WAJAH…'),n>0);$('#crtSt').textContent=demo?'NO SIGNAL':'SIGNAL OK'}
+ requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+
+function setDemo(b){demo=b;$('#tDemo').classList.toggle('on',b);lastN=-1;if(b)setSt('DEMO',true)}
+async function startCam(){
+ $('#start').classList.add('hide');setSt('IZIN KAMERA…');
+ try{await document.documentElement.requestFullscreen();await screen.orientation.lock('landscape')}catch(e){}
+ try{v.srcObject=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},audio:false});await v.play()}
+ catch(e){setSt('KAMERA TIDAK ADA · DEMO');setDemo(true);return}
+ setSt('MEMUAT MODEL…');
+ try{fm=new FaceMesh({locateFile:f=>CDN+f});fm.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.6,minTrackingConfidence:.5});
+  fm.onResults(r=>{const l=r.multiFaceLandmarks&&r.multiFaceLandmarks[0];if(l){raw=l;setTarget(mapFace(l))}});
+  await fm.initialize();ready=true;setDemo(false);lastN=-1}
+ catch(e){setSt('MODEL GAGAL · DEMO');setDemo(true)}}
+$('#go').onclick=startCam;
+$('#demo').onclick=()=>{$('#start').classList.add('hide');setDemo(true)};
+$('#tDots').onclick=e=>{dots=!dots;e.target.classList.toggle('on',dots)};
+$('#tCam').onclick=e=>{crtOn=!crtOn;$('#crt').classList.toggle('off',!crtOn);e.target.classList.toggle('on',crtOn);gw=0};
+$('#tDemo').onclick=()=>{if(demo){if(ready)setDemo(false);else $('#start').classList.remove('hide')}else setDemo(true)};
+$('#tFs').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else{await document.documentElement.requestFullscreen();await screen.orientation.lock('landscape')}}catch(e){}};
+</script></body></html>
